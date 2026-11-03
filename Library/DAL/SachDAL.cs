@@ -72,7 +72,6 @@ namespace Library
                 }
             }
         }
-
         public void Update(Sach sach)
         {
             using (SqlConnection conn = Database.GetConnection())
@@ -80,23 +79,28 @@ namespace Library
                 conn.Open();
 
                 string sql = @"
-                    UPDATE Sach
-                    SET TenSach = @TenSach,
-                        TacGia = @TacGia,
-                        TheLoai = @TheLoai,
-                        NhaXuatBan = @NhaXuatBan,
-                        NamXuatBan = @NamXuatBan,
-                        SoLuong = @SoLuong,
-                        HinhAnh = @HinhAnh
-                    WHERE MaSach = @MaSach";
+            UPDATE Sach
+            SET TenSach = @TenSach,
+                TacGia = @TacGia,
+                TheLoai = @TheLoai,
+                NhaXuatBan = @NhaXuatBan,
+                NamXuatBan = @NamXuatBan,
+                HinhAnh = @HinhAnh
+            WHERE MaSach = @MaSach";
 
                 using (SqlCommand cmd = new SqlCommand(sql, conn))
                 {
                     AddParameters(cmd, sach);
-                    cmd.ExecuteNonQuery();
+
+                    if (cmd.ExecuteNonQuery() == 0)
+                    {
+                        throw new Exception(
+                            "Không tìm thấy sách cần sửa.");
+                    }
                 }
             }
         }
+
 
         public void Delete(string maSach)
         {

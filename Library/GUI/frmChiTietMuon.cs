@@ -382,7 +382,8 @@ namespace Library
                             string sqlTraSach = @"
                                 UPDATE ChiTietMuon
                                 SET NgayTra = GETDATE(),
-                                    TrangThai = N'Đã trả'
+                                    TrangThai = N'Đã trả',
+                                    SoLuongDaTra = SoLuong
                                 OUTPUT INSERTED.NgayTra
                                 WHERE MaChiTiet = @MaChiTiet
                                   AND TrangThai = N'Đang mượn'

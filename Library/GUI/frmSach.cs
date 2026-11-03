@@ -79,6 +79,7 @@ namespace Library
             frm.NhaXuatBan = Convert.ToString(row.Cells[4].Value) ?? "";
             frm.NamXuatBan = Convert.ToInt32(row.Cells[5].Value);
             frm.SoLuong = Convert.ToInt32(row.Cells[6].Value);
+            frm.KhoaSoLuong = true;
             frm.HinhAnh = sachBLL.LayDuongDanAnh(frm.MaSach);
 
             if (frm.ShowDialog() != DialogResult.OK)

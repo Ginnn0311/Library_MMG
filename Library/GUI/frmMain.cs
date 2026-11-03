@@ -37,6 +37,123 @@ namespace Library
             Load += frmMain_Load;
         }
 
+        private bool LaQuanTriVien(string vaiTro)
+        {
+            return string.Equals(
+                vaiTro?.Trim(),
+                "Quản trị viên",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool LaQuanLy(string vaiTro)
+        {
+            return string.Equals(
+                vaiTro?.Trim(),
+                "Quản lý",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool CoQuyenQuanLy(string vaiTro)
+        {
+            return LaQuanTriVien(vaiTro) ||
+                   LaQuanLy(vaiTro);
+        }
+
+        private bool CapNhatQuyenTuDatabase()
+        {
+            try
+            {
+                using (SqlConnection conn =
+                    Database.GetConnection())
+                {
+                    const string sql = @"
+                        SELECT VaiTro
+                        FROM NhanVien
+                        WHERE MaNhanVien = @MaNhanVien";
+
+                    using (SqlCommand cmd =
+                        new SqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.Add(
+                            "@MaNhanVien",
+                            SqlDbType.Int).Value =
+                            maNhanVienDangNhap;
+
+                        conn.Open();
+
+                        object ketQua = cmd.ExecuteScalar();
+
+                        if (ketQua == null ||
+                            ketQua == DBNull.Value)
+                        {
+                            vaiTroDangNhap = "";
+                            PhanQuyen(vaiTroDangNhap);
+
+                            ThongBao.CanhBao(
+                                "Tài khoản đăng nhập " +
+                                "không còn tồn tại!");
+
+                            return false;
+                        }
+
+                        vaiTroDangNhap =
+                            Convert.ToString(ketQua)?.Trim()
+                            ?? "";
+
+                        PhanQuyen(vaiTroDangNhap);
+
+                        lblVaiTroDangNhap.Text =
+                            "Mã NV: " + maNhanVienDangNhap +
+                            " | " + vaiTroDangNhap;
+
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                vaiTroDangNhap = "";
+                PhanQuyen(vaiTroDangNhap);
+
+                ThongBao.Loi(
+                    "Không thể kiểm tra quyền tài khoản:\n" +
+                    ex.Message);
+
+                return false;
+            }
+        }
+
+        private bool KiemTraQuyenQuanLyNhanVien()
+        {
+            if (!CapNhatQuyenTuDatabase())
+                return false;
+
+            if (!CoQuyenQuanLy(vaiTroDangNhap))
+            {
+                ThongBao.CanhBao(
+                    "Bạn không có quyền quản lý nhân viên!");
+
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool KiemTraQuyenBaoCao()
+        {
+            if (!CapNhatQuyenTuDatabase())
+                return false;
+
+            if (!CoQuyenQuanLy(vaiTroDangNhap))
+            {
+                ThongBao.CanhBao(
+                    "Bạn không có quyền xem báo cáo!");
+
+                return false;
+            }
+
+            return true;
+        }
 
         private void GanSuKien()
         {
@@ -61,6 +178,7 @@ namespace Library
             btnMuonTra.Click += (s, e) =>
             {
                 DanhDauMenu(btnMuonTra);
+
                 MoForm(new frmPhieuMuon(
                     maNhanVienDangNhap,
                     hoTenDangNhap));
@@ -74,23 +192,22 @@ namespace Library
 
             btnNhanVien.Click += (s, e) =>
             {
-                if (btnNhanVien.Enabled)
-                {
-                    DanhDauMenu(btnNhanVien);
-                    MoForm(new frmNhanVien());
-                }
+                if (!KiemTraQuyenQuanLyNhanVien())
+                    return;
+
+                DanhDauMenu(btnNhanVien);
+
+                MoForm(new frmNhanVien(
+                    maNhanVienDangNhap));
             };
 
             btnBaoCao.Click += (s, e) =>
             {
-                if (btnBaoCao.Enabled)
-                {
-                    DanhDauMenu(btnBaoCao);
-                    MoBaoCao();
-                }
+                MoBaoCao();
             };
 
-            btnDangXuat.Click += thoátToolStripMenuItem_Click;
+            btnDangXuat.Click +=
+                thoátToolStripMenuItem_Click;
 
             pnlDashboard.Resize += (s, e) =>
                 CanChinhDashboard();
@@ -98,32 +215,13 @@ namespace Library
             DanhDauMenu(btnTongQuan);
         }
 
-
-        private void CanChinhDashboard()
-        {
-            int width = Math.Max(
-                300,
-                pnlDashboard.ClientSize.Width - 24);
-
-            cardSach.Width = width;
-            cardDocGia.Width = width;
-            cardQuaHan.Width = width;
-        }
-
-
         public void PhanQuyen(string vaiTro)
         {
-            string quyen = (vaiTro ?? "").Trim();
+            bool duocQuanLy =
+                CoQuyenQuanLy(vaiTro);
 
-            bool laAdmin =
-                quyen.Equals("Quản lý",
-                    StringComparison.OrdinalIgnoreCase)
-                ||
-                quyen.Equals("Quản trị viên",
-                    StringComparison.OrdinalIgnoreCase);
-
-            btnNhanVien.Enabled = laAdmin;
-            btnBaoCao.Enabled = laAdmin;
+            btnNhanVien.Enabled = duocQuanLy;
+            btnBaoCao.Enabled = duocQuanLy;
 
             btnNhanVien.Visible = true;
             btnBaoCao.Visible = true;
@@ -141,6 +239,16 @@ namespace Library
                 Color.LightGray;
         }
 
+        private void CanChinhDashboard()
+        {
+            int width = Math.Max(
+                300,
+                pnlDashboard.ClientSize.Width - 24);
+
+            cardSach.Width = width;
+            cardDocGia.Width = width;
+            cardQuaHan.Width = width;
+        }
 
         private void HienThiTaiKhoan()
         {
@@ -209,7 +317,8 @@ namespace Library
                                 SqlDbType.Int).Value =
                                 maNhanVienDangNhap;
 
-                            object giaTri = cmd.ExecuteScalar();
+                            object giaTri =
+                                cmd.ExecuteScalar();
 
                             if (giaTri is byte[] duLieuAnh &&
                                 duLieuAnh.Length > 0)
@@ -222,8 +331,9 @@ namespace Library
                                     anh = new Bitmap(anhGoc);
                                 }
                             }
-                            else if (giaTri is string duongDan &&
-                                     File.Exists(duongDan))
+                            else if (
+                                giaTri is string duongDan &&
+                                File.Exists(duongDan))
                             {
                                 using (Image anhGoc =
                                     Image.FromFile(duongDan))
@@ -253,37 +363,48 @@ namespace Library
         {
             Bitmap bitmap = new Bitmap(100, 100);
 
-            using (Graphics g = Graphics.FromImage(bitmap))
+            using (Graphics g =
+                Graphics.FromImage(bitmap))
             {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.SmoothingMode =
+                    SmoothingMode.AntiAlias;
+
                 g.Clear(Color.Transparent);
 
-                using (SolidBrush nen = new SolidBrush(
-                    Color.FromArgb(37, 99, 235)))
+                using (SolidBrush nen =
+                    new SolidBrush(
+                        Color.FromArgb(37, 99, 235)))
                 {
                     g.FillEllipse(nen, 0, 0, 99, 99);
                 }
 
                 string chu = "NV";
 
-                if (!string.IsNullOrWhiteSpace(hoTenDangNhap))
+                if (!string.IsNullOrWhiteSpace(
+                    hoTenDangNhap))
                 {
-                    string[] cacTu = hoTenDangNhap.Trim().Split(
-                        ' ',
-                        StringSplitOptions.RemoveEmptyEntries);
+                    string[] cacTu =
+                        hoTenDangNhap.Trim().Split(
+                            ' ',
+                            StringSplitOptions
+                                .RemoveEmptyEntries);
 
                     if (cacTu.Length >= 2)
                     {
                         chu = (
-                            cacTu[cacTu.Length - 2][0].ToString() +
-                            cacTu[cacTu.Length - 1][0].ToString()
+                            cacTu[cacTu.Length - 2][0]
+                                .ToString() +
+                            cacTu[cacTu.Length - 1][0]
+                                .ToString()
                         ).ToUpper();
                     }
                     else if (cacTu.Length == 1)
                     {
                         chu = cacTu[0].Substring(
                             0,
-                            Math.Min(2, cacTu[0].Length)
+                            Math.Min(
+                                2,
+                                cacTu[0].Length)
                         ).ToUpper();
                     }
                 }
@@ -307,7 +428,8 @@ namespace Library
                         chu,
                         font,
                         mauChu,
-                        new RectangleF(0, 0, 100, 100),
+                        new RectangleF(
+                            0, 0, 100, 100),
                         format);
                 }
             }
@@ -322,7 +444,8 @@ namespace Library
             pnlBody.Controls.Clear();
 
             lblTitle.Text = "Tổng quan";
-            lblSubtitle.Text = "Quản lý thư viện của bạn";
+            lblSubtitle.Text =
+                "Quản lý thư viện của bạn";
 
             pnlBody.Controls.Add(pnlDashboard);
 
@@ -347,7 +470,9 @@ namespace Library
                 "Hệ thống quản lý thư viện";
 
             frm.TopLevel = false;
-            frm.FormBorderStyle = FormBorderStyle.None;
+            frm.FormBorderStyle =
+                FormBorderStyle.None;
+
             frm.Dock = DockStyle.Fill;
             frm.StartPosition =
                 FormStartPosition.Manual;
@@ -390,7 +515,8 @@ namespace Library
                     {
                         lblSoSach.Text =
                             Convert.ToInt32(
-                                cmd.ExecuteScalar()).ToString();
+                                cmd.ExecuteScalar())
+                            .ToString();
                     }
 
                     using (SqlCommand cmd =
@@ -400,20 +526,28 @@ namespace Library
                     {
                         lblSoDocGia.Text =
                             Convert.ToInt32(
-                                cmd.ExecuteScalar()).ToString();
+                                cmd.ExecuteScalar())
+                            .ToString();
                     }
 
                     string sql = @"
                         SELECT
                             COUNT(CASE
-                                WHEN pm.HanTra >= CONVERT(DATE, GETDATE())
-                                 AND pm.HanTra <= DATEADD(
-                                     DAY, 3, CONVERT(DATE, GETDATE()))
+                                WHEN pm.HanTra >=
+                                    CONVERT(DATE, GETDATE())
+                                 AND pm.HanTra <=
+                                    DATEADD(
+                                        DAY,
+                                        3,
+                                        CONVERT(
+                                            DATE,
+                                            GETDATE()))
                                 THEN 1
                             END) AS SapDenHan,
 
                             COUNT(CASE
-                                WHEN pm.HanTra < CONVERT(DATE, GETDATE())
+                                WHEN pm.HanTra <
+                                    CONVERT(DATE, GETDATE())
                                 THEN 1
                             END) AS QuaHan
 
@@ -423,7 +557,8 @@ namespace Library
                         (
                             SELECT 1
                             FROM ChiTietMuon ct
-                            WHERE ct.MaPhieuMuon = pm.MaPhieuMuon
+                            WHERE ct.MaPhieuMuon =
+                                pm.MaPhieuMuon
                               AND ct.NgayTra IS NULL
                         )";
 
@@ -436,11 +571,13 @@ namespace Library
                         {
                             lblSapDenHan.Text =
                                 Convert.ToInt32(
-                                    reader["SapDenHan"]).ToString();
+                                    reader["SapDenHan"])
+                                .ToString();
 
                             lblQuaHan.Text =
                                 Convert.ToInt32(
-                                    reader["QuaHan"]).ToString();
+                                    reader["QuaHan"])
+                                .ToString();
                         }
                     }
 
@@ -463,21 +600,14 @@ namespace Library
 
         private void MoBaoCao()
         {
-            bool laQuanTriVien = string.Equals(
-                vaiTroDangNhap?.Trim(),
-                "Quản trị viên",
-                StringComparison.OrdinalIgnoreCase);
-
-            if (!laQuanTriVien)
-            {
-                ThongBao.CanhBao(
-                    "Bạn không có quyền truy cập chức năng báo cáo.");
+            if (!KiemTraQuyenBaoCao())
                 return;
-            }
 
             DanhDauMenu(btnBaoCao);
+
             MoForm(new frmBaoCao());
         }
+
         private void frmMain_Load(
             object sender,
             EventArgs e)
@@ -500,9 +630,11 @@ namespace Library
 
             try
             {
-                using (frmLogin login = new frmLogin())
+                using (frmLogin login =
+                    new frmLogin())
                 {
-                    if (login.ShowDialog() == DialogResult.OK)
+                    if (login.ShowDialog() ==
+                        DialogResult.OK)
                     {
                         maNhanVienDangNhap =
                             login.MaNhanVienDangNhap;
@@ -532,20 +664,33 @@ namespace Library
             }
         }
 
-        private void DanhDauMenu(Guna.UI2.WinForms.Guna2Button nutDangChon)
+        private void DanhDauMenu(
+            Guna.UI2.WinForms.Guna2Button nutDangChon)
         {
-            Guna.UI2.WinForms.Guna2Button[] danhSachNut ={ btnTongQuan,btnSach,btnDocGia, btnNhanVien,btnMuonTra,btnChiTietMuon, btnBaoCao};
+            Guna.UI2.WinForms.Guna2Button[] danhSachNut =
+            {
+                btnTongQuan,
+                btnSach,
+                btnDocGia,
+                btnNhanVien,
+                btnMuonTra,
+                btnChiTietMuon,
+                btnBaoCao
+            };
 
             foreach (var nut in danhSachNut)
             {
-                nut.FillColor = Color.FromArgb(43, 81, 132);
+                nut.FillColor =
+                    Color.FromArgb(43, 81, 132);
+
                 nut.BorderThickness = 0;
             }
 
-            nutDangChon.FillColor = Color.FromArgb(65, 113, 176);
+            nutDangChon.FillColor =
+                Color.FromArgb(65, 113, 176);
+
             nutDangChon.BorderThickness = 0;
         }
-
 
         private void chiTietMuonToolStripMenuItem_Click(
             object sender,

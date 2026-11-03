@@ -295,6 +295,22 @@ namespace Library
             Close();
         }
 
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        [System.ComponentModel.Browsable(false)]
+        public bool KhoaSoLuong
+        {
+            get
+            {
+                return txtSoLuong.ReadOnly;
+            }
+            set
+            {
+                txtSoLuong.ReadOnly = value;
+                txtSoLuong.TabStop = !value;
+            }
+        }
+
+
         private void TextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode != Keys.Enter)

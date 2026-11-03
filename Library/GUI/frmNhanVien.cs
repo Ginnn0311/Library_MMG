@@ -5,19 +5,38 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using Microsoft.Data.SqlClient;
 
 namespace Library
 {
     public partial class frmNhanVien : Form
     {
-        private readonly NhanVienDAL nhanVienDAL = new NhanVienDAL();
-        private List<NhanVien> danhSachNhanVien = new List<NhanVien>();
+        private readonly NhanVienDAL nhanVienDAL =
+            new NhanVienDAL();
 
-        public frmNhanVien()
+        private List<NhanVien> danhSachNhanVien =
+            new List<NhanVien>();
+
+        private readonly int maNhanVienDangNhap;
+
+        public frmNhanVien(int maNhanVienDangNhap)
         {
             InitializeComponent();
 
+            this.maNhanVienDangNhap = maNhanVienDangNhap;
+
+            KhoiTaoForm();
+        }
+
+        // Constructor phục vụ Windows Forms Designer.
+        public frmNhanVien() : this(0)
+        {
+        }
+
+        private void KhoiTaoForm()
+        {
             cboTimTheo.Items.Clear();
+
             cboTimTheo.Items.AddRange(new object[]
             {
                 "Mã nhân viên",
@@ -29,18 +48,47 @@ namespace Library
 
             cboTimTheo.SelectedIndex = 0;
 
+            dgvNhanVien.AllowUserToAddRows = false;
+            dgvNhanVien.MultiSelect = false;
+            dgvNhanVien.SelectionMode =
+                DataGridViewSelectionMode.FullRowSelect;
+
+            picHinhAnh.SizeMode = PictureBoxSizeMode.Zoom;
+
+            Load -= frmNhanVien_Load;
             Load += frmNhanVien_Load;
+
+            btnTimKiem.Click -= btnTimKiem_Click;
             btnTimKiem.Click += btnTimKiem_Click;
-            txtTimKiem.TextChanged += txtTimKiem_TextChanged;
+
+            txtTimKiem.TextChanged -=
+                txtTimKiem_TextChanged;
+            txtTimKiem.TextChanged +=
+                txtTimKiem_TextChanged;
+
+            txtTimKiem.KeyDown -= txtTimKiem_KeyDown;
             txtTimKiem.KeyDown += txtTimKiem_KeyDown;
-            cboTimTheo.SelectedIndexChanged += cboTimTheo_SelectedIndexChanged;
+
+            cboTimTheo.SelectedIndexChanged -=
+                cboTimTheo_SelectedIndexChanged;
+            cboTimTheo.SelectedIndexChanged +=
+                cboTimTheo_SelectedIndexChanged;
 
             dgvNhanVien.CellClick -= dgvNhanVien_CellClick;
             dgvNhanVien.CellClick += dgvNhanVien_CellClick;
+
+            btnThem.Click -= btnThem_Click;
             btnThem.Click += btnThem_Click;
+
+            btnSua.Click -= btnSua_Click;
+            btnSua.Click += btnSua_Click;
+
+            btnXoa.Click -= btnXoa_Click;
+            btnXoa.Click += btnXoa_Click;
         }
 
-        private void frmNhanVien_Load(object sender, EventArgs e)
+        private void frmNhanVien_Load(
+            object sender, EventArgs e)
         {
             HienThiDanhSach();
         }
@@ -49,20 +97,22 @@ namespace Library
         {
             try
             {
-                danhSachNhanVien = nhanVienDAL.GetAll();
+                danhSachNhanVien =
+                    nhanVienDAL.GetAll()
+                    ?? new List<NhanVien>();
 
-                if (danhSachNhanVien == null)
-                    danhSachNhanVien = new List<NhanVien>();
-
-                DoDuLieuLenBang(danhSachNhanVien);
+                TimKiemNhanVien();
             }
             catch (Exception ex)
             {
-                ThongBao.Loi("Không thể tải danh sách nhân viên");
+                ThongBao.Loi(
+                    "Không thể tải danh sách nhân viên:\n"
+                    + ex.Message);
             }
         }
 
-        private void DoDuLieuLenBang(List<NhanVien> danhSach)
+        private void DoDuLieuLenBang(
+            List<NhanVien> danhSach)
         {
             dgvNhanVien.Rows.Clear();
             XoaThongTin();
@@ -83,38 +133,56 @@ namespace Library
 
             dgvNhanVien.ClearSelection();
 
-            dgvNhanVien.CurrentCell = null;
+            dgvNhanVien.CurrentCell =
+                dgvNhanVien.Rows[0].Cells[0];
 
             dgvNhanVien.Rows[0].Selected = true;
 
-            HienThiThongTinNhanVien(dgvNhanVien.Rows[0]);
+            HienThiThongTinNhanVien(
+                dgvNhanVien.Rows[0]);
         }
 
-        private void dgvNhanVien_CellClick(object sender, DataGridViewCellEventArgs e)
+        private void dgvNhanVien_CellClick(
+            object sender,
+            DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex < 0)
+            if (e.RowIndex < 0 ||
+                e.RowIndex >= dgvNhanVien.Rows.Count)
                 return;
 
-            HienThiThongTinNhanVien(dgvNhanVien.Rows[e.RowIndex]);
+            DataGridViewRow row =
+                dgvNhanVien.Rows[e.RowIndex];
+
+            if (row.IsNewRow)
+                return;
+
+            dgvNhanVien.CurrentCell = row.Cells[0];
+
+            HienThiThongTinNhanVien(row);
         }
 
-        private void HienThiThongTinNhanVien(DataGridViewRow row)
+        private void HienThiThongTinNhanVien(
+            DataGridViewRow row)
         {
-            if (row == null || row.IsNewRow || row.Cells.Count < 5)
+            if (row == null ||
+                row.IsNewRow ||
+                row.Cells.Count < 5)
             {
                 XoaThongTin();
                 return;
             }
 
-            string maNhanVien = Convert.ToString(row.Cells[0].Value);
-
-            if (string.IsNullOrWhiteSpace(maNhanVien))
+            if (!int.TryParse(
+                Convert.ToString(row.Cells[0].Value),
+                out int maNhanVien))
             {
                 XoaThongTin();
                 return;
             }
 
-            NhanVien nv = danhSachNhanVien.FirstOrDefault(x => x.MaNhanVien.ToString() == maNhanVien);
+            NhanVien nv = danhSachNhanVien
+                .FirstOrDefault(x =>
+                    x.MaNhanVien == maNhanVien);
 
             if (nv == null)
             {
@@ -122,42 +190,49 @@ namespace Library
                 return;
             }
 
-            lblMaNhanVien.Text = "Mã nhân viên: " + nv.MaNhanVien;
-            lblHoTen.Text = "Họ tên: " + nv.HoTen;
-            lblSoDienThoai.Text = "Số điện thoại: " + nv.SoDienThoai;
-            lblTaiKhoan.Text = "Tài khoản: " + nv.TaiKhoan;
-            lblVaiTro.Text = "Vai trò: " + nv.VaiTro;
+            lblMaNhanVien.Text =
+                "Mã nhân viên: " + nv.MaNhanVien;
+
+            lblHoTen.Text =
+                "Họ tên: " + nv.HoTen;
+
+            lblSoDienThoai.Text =
+                "Số điện thoại: " + nv.SoDienThoai;
+
+            lblTaiKhoan.Text =
+                "Tài khoản: " + nv.TaiKhoan;
+
+            lblVaiTro.Text =
+                "Vai trò: " + nv.VaiTro;
 
             HienThiAnh(nv.HinhAnh);
         }
 
         private void HienThiAnh(string duongDan)
         {
-            if (picHinhAnh.Image != null)
-            {
-                Image anhCu = picHinhAnh.Image;
-                picHinhAnh.Image = null;
-                anhCu.Dispose();
-            }
+            Image anhCu = picHinhAnh.Image;
+            picHinhAnh.Image = null;
+            anhCu?.Dispose();
 
             if (string.IsNullOrWhiteSpace(duongDan))
                 return;
 
-            string duongDanDayDu = duongDan;
-
-            if (!Path.IsPathRooted(duongDanDayDu))
-            {
-                duongDanDayDu = Path.Combine(
-                    Application.StartupPath,
-                    duongDanDayDu);
-            }
-
-            if (!File.Exists(duongDanDayDu))
-                return;
-
             try
             {
-                using (Image img = Image.FromFile(duongDanDayDu))
+                string duongDanDayDu = duongDan;
+
+                if (!Path.IsPathRooted(duongDanDayDu))
+                {
+                    duongDanDayDu = Path.Combine(
+                        Application.StartupPath,
+                        duongDanDayDu);
+                }
+
+                if (!File.Exists(duongDanDayDu))
+                    return;
+
+                using (Image img =
+                    Image.FromFile(duongDanDayDu))
                 {
                     picHinhAnh.Image = new Bitmap(img);
                 }
@@ -176,82 +251,93 @@ namespace Library
             lblTaiKhoan.Text = "Tài khoản:";
             lblVaiTro.Text = "Vai trò:";
 
-            if (picHinhAnh.Image != null)
-            {
-                Image anhCu = picHinhAnh.Image;
-                picHinhAnh.Image = null;
-                anhCu.Dispose();
-            }
+            Image anhCu = picHinhAnh.Image;
+            picHinhAnh.Image = null;
+            anhCu?.Dispose();
         }
 
         private void TimKiemNhanVien()
         {
-            string tuKhoa = txtTimKiem.Text.Trim().ToLower();
-
-            if (string.IsNullOrWhiteSpace(tuKhoa))
-            {
-                DoDuLieuLenBang(danhSachNhanVien);
-                return;
-            }
+            string tuKhoa =
+                txtTimKiem.Text.Trim().ToLower();
 
             List<NhanVien> ketQua;
 
-            switch (cboTimTheo.Text)
+            if (string.IsNullOrWhiteSpace(tuKhoa))
             {
-                case "Mã nhân viên":
-                    ketQua = danhSachNhanVien
-                        .Where(nv => nv.MaNhanVien.ToString()
-                        .Contains(tuKhoa))
-                        .ToList();
-                    break;
+                ketQua = danhSachNhanVien;
+            }
+            else
+            {
+                switch (cboTimTheo.Text)
+                {
+                    case "Mã nhân viên":
+                        ketQua = danhSachNhanVien
+                            .Where(nv =>
+                                nv.MaNhanVien.ToString()
+                                .Contains(tuKhoa))
+                            .ToList();
+                        break;
 
-                case "Họ tên":
-                    ketQua = danhSachNhanVien
-                        .Where(nv => (nv.HoTen ?? "")
-                        .ToLower().Contains(tuKhoa))
-                        .ToList();
-                    break;
+                    case "Họ tên":
+                        ketQua = danhSachNhanVien
+                            .Where(nv =>
+                                (nv.HoTen ?? "")
+                                .ToLower()
+                                .Contains(tuKhoa))
+                            .ToList();
+                        break;
 
-                case "Số điện thoại":
-                    ketQua = danhSachNhanVien
-                        .Where(nv => (nv.SoDienThoai ?? "")
-                        .ToLower().Contains(tuKhoa))
-                        .ToList();
-                    break;
+                    case "Số điện thoại":
+                        ketQua = danhSachNhanVien
+                            .Where(nv =>
+                                (nv.SoDienThoai ?? "")
+                                .ToLower()
+                                .Contains(tuKhoa))
+                            .ToList();
+                        break;
 
-                case "Tài khoản":
-                    ketQua = danhSachNhanVien
-                        .Where(nv => (nv.TaiKhoan ?? "")
-                        .ToLower().Contains(tuKhoa))
-                        .ToList();
-                    break;
+                    case "Tài khoản":
+                        ketQua = danhSachNhanVien
+                            .Where(nv =>
+                                (nv.TaiKhoan ?? "")
+                                .ToLower()
+                                .Contains(tuKhoa))
+                            .ToList();
+                        break;
 
-                case "Vai trò":
-                    ketQua = danhSachNhanVien
-                        .Where(nv => (nv.VaiTro ?? "")
-                        .ToLower().Contains(tuKhoa))
-                        .ToList();
-                    break;
+                    case "Vai trò":
+                        ketQua = danhSachNhanVien
+                            .Where(nv =>
+                                (nv.VaiTro ?? "")
+                                .ToLower()
+                                .Contains(tuKhoa))
+                            .ToList();
+                        break;
 
-                default:
-                    ketQua = danhSachNhanVien;
-                    break;
+                    default:
+                        ketQua = danhSachNhanVien;
+                        break;
+                }
             }
 
             DoDuLieuLenBang(ketQua);
         }
 
-        private void btnTimKiem_Click(object sender, EventArgs e)
+        private void btnTimKiem_Click(
+            object sender, EventArgs e)
         {
             TimKiemNhanVien();
         }
 
-        private void txtTimKiem_TextChanged(object sender, EventArgs e)
+        private void txtTimKiem_TextChanged(
+            object sender, EventArgs e)
         {
             TimKiemNhanVien();
         }
 
-        private void txtTimKiem_KeyDown(object sender, KeyEventArgs e)
+        private void txtTimKiem_KeyDown(
+            object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
@@ -261,14 +347,113 @@ namespace Library
         }
 
         private void cboTimTheo_SelectedIndexChanged(
-            object sender,
-            EventArgs e)
+            object sender, EventArgs e)
         {
             TimKiemNhanVien();
         }
-        private void btnThem_Click(object sender, EventArgs e)
+
+        // Kiểm tra quyền quản lý nhân viên
+        private bool KiemTraQuyenQuanLy()
         {
-            using (frmThemNhanVien frm = new frmThemNhanVien())
+            try
+            {
+                if (maNhanVienDangNhap <= 0)
+                {
+                    ThongBao.CanhBao(
+                        "Không xác định được tài khoản đăng nhập!");
+                    return false;
+                }
+
+                string vaiTro = nhanVienDAL.GetAll()
+                    .FirstOrDefault(x =>
+                        x.MaNhanVien == maNhanVienDangNhap)
+                    ?.VaiTro?.Trim() ?? "";
+
+                bool hopLe =
+                    vaiTro.Equals(
+                        "Quản trị viên",
+                        StringComparison.OrdinalIgnoreCase)
+                    ||
+                    vaiTro.Equals(
+                        "Quản lý",
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (!hopLe)
+                {
+                    ThongBao.CanhBao(
+                        "Bạn không có quyền quản lý nhân viên!");
+                }
+
+                return hopLe;
+            }
+            catch (Exception ex)
+            {
+                ThongBao.Loi(
+                    "Không thể kiểm tra quyền: " + ex.Message);
+                return false;
+            }
+        }
+
+        private bool LaQuanTriVien(string vaiTro)
+        {
+            return string.Equals(
+                vaiTro?.Trim(),
+                "Quản trị viên",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Quản lý không được sửa/xóa quản trị viên
+        private bool KiemTraQuyenSuaXoa(NhanVien nv)
+        {
+            try
+            {
+                var danhSachMoi = nhanVienDAL.GetAll();
+
+                var nguoiThaoTac =
+                    danhSachMoi.FirstOrDefault(
+                        x => x.MaNhanVien ==
+                            maNhanVienDangNhap);
+
+                var nhanVienHienTai =
+                    danhSachMoi.FirstOrDefault(
+                        x => x.MaNhanVien ==
+                            nv.MaNhanVien);
+
+                if (nguoiThaoTac == null ||
+                    nhanVienHienTai == null)
+                {
+                    ThongBao.CanhBao(
+                        "Tài khoản không còn tồn tại!");
+                    return false;
+                }
+
+                if (!LaQuanTriVien(nguoiThaoTac.VaiTro) &&
+                    LaQuanTriVien(nhanVienHienTai.VaiTro))
+                {
+                    ThongBao.CanhBao(
+                        "Chỉ quản trị viên được sửa hoặc " +
+                        "xóa tài khoản quản trị!");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ThongBao.Loi(
+                    "Không thể kiểm tra quyền: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void btnThem_Click(
+            object sender, EventArgs e)
+        {
+            if (!KiemTraQuyenQuanLy())
+                return;
+
+            using (frmThemNhanVien frm =
+                new frmThemNhanVien(maNhanVienDangNhap))
             {
                 if (frm.ShowDialog() == DialogResult.OK)
                 {
@@ -276,23 +461,27 @@ namespace Library
                 }
             }
         }
-        private void btnSua_Click(object sender, EventArgs e)
+
+        private void btnSua_Click(
+            object sender, EventArgs e)
         {
-            if (dgvNhanVien.CurrentRow == null)
+            if (!KiemTraQuyenQuanLy())
+                return;
+
+            if (!LayNhanVienDangChon(
+                out NhanVien nv))
             {
-                ThongBao.CanhBao("Vui lòng chọn nhân viên cần sửa!");
+                ThongBao.CanhBao(
+                    "Vui lòng chọn nhân viên cần sửa!");
                 return;
             }
 
-            int maNhanVien = Convert.ToInt32(
-                dgvNhanVien.CurrentRow.Cells[0].Value);
-
-            NhanVien nv = danhSachNhanVien.Find(x => x.MaNhanVien == maNhanVien);
-
-            if (nv == null)
+            if (!KiemTraQuyenSuaXoa(nv))
                 return;
 
-            using (frmThemNhanVien frm = new frmThemNhanVien(nv))
+            using (frmThemNhanVien frm =
+                new frmThemNhanVien(
+                    nv, maNhanVienDangNhap))
             {
                 if (frm.ShowDialog() == DialogResult.OK)
                 {
@@ -301,42 +490,103 @@ namespace Library
             }
         }
 
-        private void btnXoa_Click(object sender, EventArgs e)
+        private void btnXoa_Click(
+            object sender, EventArgs e)
         {
-            if (dgvNhanVien.CurrentRow == null)
+            if (!KiemTraQuyenQuanLy())
+                return;
+
+            if (!LayNhanVienDangChon(
+                out NhanVien nv))
             {
-                ThongBao.CanhBao("Vui lòng chọn nhân viên cần xóa!");
+                ThongBao.CanhBao(
+                    "Vui lòng chọn nhân viên cần xóa!");
                 return;
             }
 
-            int maNhanVien = Convert.ToInt32(
-                dgvNhanVien.CurrentRow.Cells[0].Value);
+            if (!KiemTraQuyenSuaXoa(nv))
+                return;
 
-            string hoTen = Convert.ToString(dgvNhanVien.CurrentRow.Cells[1].Value);
-
-            if (!ThongBao.XacNhan(
-                $"Bạn có chắc chắn muốn xóa nhân viên {hoTen} không?"))
+            if (nv.MaNhanVien == maNhanVienDangNhap)
             {
+                ThongBao.CanhBao(
+                    "Bạn không thể xóa tài khoản " +
+                    "đang đăng nhập!");
                 return;
             }
 
             try
             {
-                if (nhanVienDAL.Xoa(maNhanVien))
+                if (!nhanVienDAL.CoTheXoaQuanTriVien(
+                    nv.MaNhanVien))
                 {
-                    ThongBao.ThanhCong("Xóa nhân viên thành công!");
+                    ThongBao.CanhBao(
+                        "Không thể xóa quản trị viên " +
+                        "cuối cùng của hệ thống!");
+                    return;
+                }
+
+                if (!ThongBao.XacNhan(
+                    "Bạn có chắc chắn muốn xóa nhân viên " +
+                    nv.HoTen + " không?"))
+                {
+                    return;
+                }
+
+                if (nhanVienDAL.Xoa(nv.MaNhanVien))
+                {
+                    ThongBao.ThanhCong(
+                        "Xóa nhân viên thành công!");
+
                     HienThiDanhSach();
                 }
                 else
                 {
-                    ThongBao.Loi("Không tìm thấy nhân viên!");
+                    ThongBao.CanhBao(
+                        "Không tìm thấy nhân viên " +
+                        "hoặc nhân viên đã bị xóa.");
                 }
+            }
+            catch (SqlException ex)
+                when (ex.Number == 547)
+            {
+                ThongBao.CanhBao(
+                    "Không thể xóa nhân viên vì " +
+                    "đã có dữ liệu liên quan " +
+                    "trong hệ thống.\n" +
+                    "Cần giữ lại lịch sử mượn/trả sách.");
             }
             catch (Exception ex)
             {
-                ThongBao.Loi("Không thể xóa nhân viên!");
+                ThongBao.Loi(
+                    "Không thể xóa nhân viên:\n" +
+                    ex.Message);
             }
         }
 
+        private bool LayNhanVienDangChon(
+            out NhanVien nhanVien)
+        {
+            nhanVien = null;
+
+            DataGridViewRow row =
+                dgvNhanVien.CurrentRow;
+
+            if (row == null || row.IsNewRow)
+                return false;
+
+            if (!int.TryParse(
+                Convert.ToString(row.Cells[0].Value),
+                out int maNhanVien))
+            {
+                return false;
+            }
+
+            nhanVien = danhSachNhanVien
+                .FirstOrDefault(x =>
+                    x.MaNhanVien == maNhanVien);
+
+            return nhanVien != null;
+        }
     }
 }

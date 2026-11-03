@@ -42,6 +42,7 @@ namespace Library
                 txtMatKhau.Text.Length;
         }
 
+
         private void btnDangNhap_Click(object sender, EventArgs e)
         {
             string taiKhoan = txtTaiKhoan.Text.Trim();
@@ -49,18 +50,14 @@ namespace Library
 
             if (string.IsNullOrWhiteSpace(taiKhoan))
             {
-                ThongBao.CanhBao(
-                    "Vui lòng nhập tài khoản.");
-
+                ThongBao.CanhBao("Vui lòng nhập tài khoản.");
                 txtTaiKhoan.Focus();
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(matKhau))
             {
-                ThongBao.CanhBao(
-                    "Vui lòng nhập mật khẩu.");
-
+                ThongBao.CanhBao("Vui lòng nhập mật khẩu.");
                 txtMatKhau.Focus();
                 return;
             }
@@ -72,51 +69,55 @@ namespace Library
                     conn.Open();
 
                     string sql = @"
-                        SELECT TOP 1 MaNhanVien, HoTen, VaiTro
-                        FROM NhanVien
-                        WHERE TaiKhoan = @TaiKhoan
-                          AND MatKhau = @MatKhau";
+                SELECT TOP 1
+                    MaNhanVien,
+                    HoTen,
+                    VaiTro,
+                    MatKhau
+                FROM NhanVien
+                WHERE TaiKhoan = @TaiKhoan";
 
                     using (SqlCommand cmd = new SqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue(
                             "@TaiKhoan", taiKhoan);
 
-                        cmd.Parameters.AddWithValue(
-                            "@MatKhau", matKhau);
-
                         using (SqlDataReader reader =
                             cmd.ExecuteReader())
                         {
-                            if (reader.Read())
+                            if (!reader.Read())
                             {
-                                MaNhanVienDangNhap =
-                                    Convert.ToInt32(
-                                        reader["MaNhanVien"]);
-
-                                HoTenDangNhap =
-                                    Convert.ToString(
-                                        reader["HoTen"]) ?? "";
-
-                                VaiTroDangNhap =
-                                    Convert.ToString(
-                                        reader["VaiTro"]) ?? "";
-
-                                DialogResult = DialogResult.OK;
-                                Close();
+                                DangNhapThatBai();
+                                return;
                             }
-                            else
+
+                            string matKhauDaLuu =
+                                Convert.ToString(
+                                    reader["MatKhau"]) ?? "";
+
+                            if (!MatKhauBaoMat.KiemTra(
+                                matKhau, matKhauDaLuu))
                             {
-                                ThongBao.CanhBao(
-                                    "Tài khoản hoặc mật khẩu không chính xác.");
-
-                                txtMatKhau.Clear();
-                                txtMatKhau.UseSystemPasswordChar = true;
-                                btnHienMatKhau.Text = "Hiện";
-                                txtMatKhau.Focus();
+                                DangNhapThatBai();
+                                return;
                             }
+
+                            MaNhanVienDangNhap =
+                                Convert.ToInt32(
+                                    reader["MaNhanVien"]);
+
+                            HoTenDangNhap =
+                                Convert.ToString(
+                                    reader["HoTen"]) ?? "";
+
+                            VaiTroDangNhap =
+                                Convert.ToString(
+                                    reader["VaiTro"]) ?? "";
                         }
                     }
+
+                    DialogResult = DialogResult.OK;
+                    Close();
                 }
             }
             catch (Exception ex)
@@ -125,6 +126,18 @@ namespace Library
                     "Lỗi đăng nhập:\n" + ex.Message);
             }
         }
+
+        private void DangNhapThatBai()
+        {
+            ThongBao.CanhBao(
+                "Tài khoản hoặc mật khẩu không chính xác.");
+
+            txtMatKhau.Clear();
+            txtMatKhau.UseSystemPasswordChar = true;
+            btnHienMatKhau.Text = "Hiện";
+            txtMatKhau.Focus();
+        }
+
 
         private void btnThoat_Click(object sender, EventArgs e)
         {

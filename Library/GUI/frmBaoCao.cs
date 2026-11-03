@@ -86,6 +86,7 @@ namespace Library
             }
         }
 
+
         private void TaiThongKeTongQuan(SqlConnection conn)
         {
             lblTongSach.Text = LaySo(conn,
@@ -100,36 +101,43 @@ namespace Library
                 "SELECT COUNT(*) FROM PhieuMuon")
                 .ToString("N0");
 
-            lblSachDangMuon.Text = LaySo(conn, @"
-                SELECT ISNULL(SUM(
-                    CASE
-                        WHEN SoLuong > ISNULL(SoLuongDaTra, 0)
-                        THEN SoLuong - ISNULL(SoLuongDaTra, 0)
-                        ELSE 0
-                    END
-                ), 0)
-                FROM ChiTietMuon").ToString("N0");
+            string dieuKienChuaTra = @"
+                    ct.NgayTra IS NULL
+                    AND ct.TrangThai = N'Đang mượn'
+                    AND ct.SoLuong > ISNULL(ct.SoLuongDaTra, 0)";
 
-            lblPhieuSapHan.Text = LaySo(conn, @"
-                SELECT COUNT(DISTINCT pm.MaPhieuMuon)
-                FROM PhieuMuon pm
-                INNER JOIN ChiTietMuon ct
-                    ON pm.MaPhieuMuon = ct.MaPhieuMuon
-                WHERE pm.HanTra >= CAST(GETDATE() AS DATE)
-                  AND pm.HanTra <= DATEADD(
-                      DAY, 3, CAST(GETDATE() AS DATE))
-                  AND ct.SoLuong > ISNULL(ct.SoLuongDaTra, 0)
-            ").ToString("N0");
+                        lblSachDangMuon.Text = LaySo(conn, @"
+                    SELECT ISNULL(SUM(
+                        CASE
+                            WHEN " + dieuKienChuaTra + @"
+                            THEN ct.SoLuong - ISNULL(ct.SoLuongDaTra, 0)
+                            ELSE 0
+                        END
+                    ), 0)
+                    FROM ChiTietMuon ct
+                ").ToString("N0");
 
-            lblPhieuQuaHan.Text = LaySo(conn, @"
-                SELECT COUNT(DISTINCT pm.MaPhieuMuon)
-                FROM PhieuMuon pm
-                INNER JOIN ChiTietMuon ct
-                    ON pm.MaPhieuMuon = ct.MaPhieuMuon
-                WHERE pm.HanTra < CAST(GETDATE() AS DATE)
-                  AND ct.SoLuong > ISNULL(ct.SoLuongDaTra, 0)
-            ").ToString("N0");
+                        lblPhieuSapHan.Text = LaySo(conn, @"
+                    SELECT COUNT(DISTINCT pm.MaPhieuMuon)
+                    FROM PhieuMuon pm
+                    INNER JOIN ChiTietMuon ct
+                        ON pm.MaPhieuMuon = ct.MaPhieuMuon
+                    WHERE pm.HanTra >= CAST(GETDATE() AS DATE)
+                      AND pm.HanTra <= DATEADD(
+                          DAY, 3, CAST(GETDATE() AS DATE))
+                      AND " + dieuKienChuaTra
+                        ).ToString("N0");
+
+                        lblPhieuQuaHan.Text = LaySo(conn, @"
+                    SELECT COUNT(DISTINCT pm.MaPhieuMuon)
+                    FROM PhieuMuon pm
+                    INNER JOIN ChiTietMuon ct
+                        ON pm.MaPhieuMuon = ct.MaPhieuMuon
+                    WHERE pm.HanTra < CAST(GETDATE() AS DATE)
+                      AND " + dieuKienChuaTra
+                        ).ToString("N0");
         }
+
 
         private void TaiBieuDo(SqlConnection conn)
         {
@@ -274,6 +282,7 @@ namespace Library
             chartMuonSach.Invalidate();
         }
 
+
         private void TaiDanhSach(SqlConnection conn)
         {
             string dieuKien = "";
@@ -281,60 +290,96 @@ namespace Library
             if (cboLoaiBaoCao.SelectedIndex == 1)
             {
                 dieuKien = @"
-                    AND pm.HanTra >= CAST(GETDATE() AS DATE)
-                    AND pm.HanTra <= DATEADD(
-                        DAY, 3, CAST(GETDATE() AS DATE))";
+            AND pm.HanTra >= CAST(GETDATE() AS DATE)
+            AND pm.HanTra <= DATEADD(
+                DAY, 3, CAST(GETDATE() AS DATE))";
             }
             else if (cboLoaiBaoCao.SelectedIndex == 2)
             {
                 dieuKien = @"
-                    AND pm.HanTra < CAST(GETDATE() AS DATE)";
+            AND pm.HanTra < CAST(GETDATE() AS DATE)";
             }
 
             string sql = @"
-                SELECT
-                    pm.MaPhieuMuon AS [Mã phiếu],
-                    dg.HoTen AS [Độc giả],
-                    pm.NgayMuon AS [Ngày mượn],
-                    pm.HanTra AS [Hạn trả],
-                    SUM(ct.SoLuong) AS [Số lượng mượn],
-                    SUM(ISNULL(ct.SoLuongDaTra, 0)) AS [Đã trả],
-                    SUM(
-                        CASE
-                            WHEN ct.SoLuong > ISNULL(ct.SoLuongDaTra, 0)
-                            THEN ct.SoLuong - ISNULL(ct.SoLuongDaTra, 0)
-                            ELSE 0
-                        END
-                    ) AS [Chưa trả],
-                    CASE
-                        WHEN pm.HanTra < CAST(GETDATE() AS DATE)
-                            THEN N'Quá hạn'
-                        WHEN pm.HanTra <= DATEADD(
-                            DAY, 3, CAST(GETDATE() AS DATE))
-                            THEN N'Sắp đến hạn'
-                        ELSE N'Đang mượn'
-                    END AS [Trạng thái]
-                FROM PhieuMuon pm
-                INNER JOIN DocGia dg
-                    ON pm.MaDocGia = dg.MaDocGia
-                INNER JOIN ChiTietMuon ct
-                    ON pm.MaPhieuMuon = ct.MaPhieuMuon
-                WHERE pm.NgayMuon >= @TuNgay
-                  AND pm.NgayMuon < DATEADD(DAY, 1, @DenNgay)
-                " + dieuKien + @"
-                GROUP BY
-                    pm.MaPhieuMuon,
-                    dg.HoTen,
-                    pm.NgayMuon,
-                    pm.HanTra
-                HAVING SUM(
-                    CASE
-                        WHEN ct.SoLuong > ISNULL(ct.SoLuongDaTra, 0)
-                        THEN ct.SoLuong - ISNULL(ct.SoLuongDaTra, 0)
-                        ELSE 0
-                    END
-                ) > 0
-                ORDER BY pm.HanTra ASC";
+        WITH ChiTietThongKe AS
+        (
+            SELECT
+                pm.MaPhieuMuon,
+                dg.HoTen,
+                pm.NgayMuon,
+                pm.HanTra,
+                ct.SoLuong,
+
+                CASE
+                    WHEN ct.NgayTra IS NOT NULL
+                         OR ct.TrangThai = N'Đã trả'
+                    THEN ct.SoLuong
+                    WHEN ISNULL(ct.SoLuongDaTra, 0) > ct.SoLuong
+                    THEN ct.SoLuong
+                    WHEN ISNULL(ct.SoLuongDaTra, 0) < 0
+                    THEN 0
+                    ELSE ISNULL(ct.SoLuongDaTra, 0)
+                END AS SoLuongDaTraThucTe
+
+            FROM PhieuMuon pm
+            INNER JOIN DocGia dg
+                ON pm.MaDocGia = dg.MaDocGia
+            INNER JOIN ChiTietMuon ct
+                ON pm.MaPhieuMuon = ct.MaPhieuMuon
+
+            WHERE pm.NgayMuon >= @TuNgay
+              AND pm.NgayMuon < DATEADD(DAY, 1, @DenNgay)
+              " + dieuKien + @"
+        ),
+        TongHop AS
+        (
+            SELECT
+                MaPhieuMuon,
+                HoTen,
+                NgayMuon,
+                HanTra,
+                SUM(SoLuong) AS TongMuon,
+                SUM(SoLuongDaTraThucTe) AS TongDaTra,
+                SUM(SoLuong - SoLuongDaTraThucTe)
+                    AS TongChuaTra
+
+            FROM ChiTietThongKe
+
+            GROUP BY
+                MaPhieuMuon,
+                HoTen,
+                NgayMuon,
+                HanTra
+        )
+
+        SELECT
+            MaPhieuMuon AS [Mã phiếu],
+            HoTen AS [Độc giả],
+            NgayMuon AS [Ngày mượn],
+            HanTra AS [Hạn trả],
+            TongMuon AS [Số lượng mượn],
+            TongDaTra AS [Đã trả],
+            TongChuaTra AS [Chưa trả],
+
+            CASE
+                WHEN TongChuaTra = 0
+                    THEN N'Đã trả'
+
+                WHEN HanTra < CAST(GETDATE() AS DATE)
+                    THEN N'Quá hạn'
+
+                WHEN HanTra <= DATEADD(
+                    DAY, 3, CAST(GETDATE() AS DATE))
+                    THEN N'Sắp đến hạn'
+
+                ELSE N'Đang mượn'
+            END AS [Trạng thái]
+
+        FROM TongHop
+
+        WHERE TongChuaTra > 0
+
+        ORDER BY HanTra ASC";
 
             using (SqlCommand cmd = new SqlCommand(sql, conn))
             {
@@ -347,7 +392,9 @@ namespace Library
                 using (SqlDataAdapter adapter = new SqlDataAdapter(cmd))
                 {
                     duLieuChiTiet = new DataTable();
+
                     adapter.Fill(duLieuChiTiet);
+
                     dgvBaoCao.DataSource = duLieuChiTiet;
                 }
             }
@@ -355,12 +402,18 @@ namespace Library
             dgvBaoCao.ReadOnly = true;
             dgvBaoCao.AllowUserToAddRows = false;
             dgvBaoCao.AllowUserToDeleteRows = false;
+
             dgvBaoCao.SelectionMode =
                 DataGridViewSelectionMode.FullRowSelect;
+
             dgvBaoCao.AutoSizeColumnsMode =
                 DataGridViewAutoSizeColumnsMode.Fill;
 
-            foreach (string tenCot in new[] { "Ngày mượn", "Hạn trả" })
+            foreach (string tenCot in new[]
+            {
+        "Ngày mượn",
+        "Hạn trả"
+    })
             {
                 if (dgvBaoCao.Columns.Contains(tenCot))
                 {
@@ -370,8 +423,11 @@ namespace Library
             }
 
             lblSoDong.Text =
-                "Tổng cộng: " + duLieuChiTiet.Rows.Count + " phiếu";
+                "Tổng cộng: " +
+                duLieuChiTiet.Rows.Count +
+                " phiếu";
         }
+
 
         private void btnXuatExcel_Click(object sender, EventArgs e)
         {

@@ -1,9 +1,13 @@
 ﻿
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Drawing;
+using System.Linq;
+using System.Net.Mail;
 using System.Windows.Forms;
 using Library.DTO;
+using Microsoft.Data.SqlClient;
 
 namespace Library
 {
@@ -26,8 +30,12 @@ namespace Library
             cbTimTheo.Items.Add("Email");
             cbTimTheo.SelectedIndex = 0;
 
-            toolStripTextBox1.TextChanged += txtTimKiem_TextChanged;
-            toolStripTextBox1.KeyDown += txtTimKiem_KeyDown;
+            toolStripTextBox1.TextChanged +=
+                txtTimKiem_TextChanged;
+
+            toolStripTextBox1.KeyDown +=
+                txtTimKiem_KeyDown;
+
             cbTimTheo.SelectedIndexChanged +=
                 cboTimTheo_SelectedIndexChanged;
 
@@ -38,6 +46,7 @@ namespace Library
         private void frmDocGia_Load(object sender, EventArgs e)
         {
             dgvDocGia.Dock = DockStyle.Fill;
+
             dgvDocGia.AutoSizeColumnsMode =
                 DataGridViewAutoSizeColumnsMode.None;
 
@@ -74,17 +83,219 @@ namespace Library
         {
             return new DocGia
             {
-                MaDocGia = frm.MaDocGia,
-                HoTen = frm.HoTen,
+                MaDocGia = frm.MaDocGia?.Trim() ?? "",
+                HoTen = frm.HoTen?.Trim() ?? "",
                 NgaySinh = frm.NgaySinh,
-                SoDienThoai = frm.SoDienThoai,
-                DiaChi = frm.DiaChi,
-                GioiTinh = frm.GioiTinh,
-                Email = frm.Email
+                SoDienThoai = frm.SoDienThoai?.Trim() ?? "",
+                DiaChi = frm.DiaChi?.Trim() ?? "",
+                GioiTinh = frm.GioiTinh?.Trim() ?? "",
+                Email = frm.Email?.Trim() ?? ""
             };
         }
 
-        private void btnThemDocGia_Click(object sender, EventArgs e)
+        private bool KiemTraDuLieu(DocGia docGia)
+        {
+            if (!int.TryParse(docGia.MaDocGia, out int ma)
+                || ma <= 0)
+            {
+                ThongBao.CanhBao(
+                    "Mã độc giả phải là số nguyên dương.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(docGia.HoTen))
+            {
+                ThongBao.CanhBao(
+                    "Vui lòng nhập họ tên độc giả.");
+                return false;
+            }
+
+            if (docGia.NgaySinh == DateTime.MinValue
+                || docGia.NgaySinh.Date > DateTime.Today)
+            {
+                ThongBao.CanhBao(
+                    "Ngày sinh không hợp lệ.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(docGia.SoDienThoai))
+            {
+                ThongBao.CanhBao(
+                    "Vui lòng nhập số điện thoại.");
+                return false;
+            }
+
+            string soDienThoai = docGia.SoDienThoai;
+
+            if (soDienThoai.Length != 10 ||
+                soDienThoai[0] != '0' ||
+                !soDienThoai.All(char.IsDigit))
+            {
+                ThongBao.CanhBao(
+                    "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.");
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(docGia.Email))
+            {
+                try
+                {
+                    MailAddress diaChiEmail =
+                        new MailAddress(docGia.Email);
+
+                    if (!string.Equals(
+                        diaChiEmail.Address,
+                        docGia.Email,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        ThongBao.CanhBao(
+                            "Địa chỉ email không hợp lệ.");
+                        return false;
+                    }
+                }
+                catch
+                {
+                    ThongBao.CanhBao(
+                        "Địa chỉ email không hợp lệ.");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool KiemTraTrungSoDienThoai(DocGia docGia)
+        {
+            using (SqlConnection conn =
+                Database.GetConnection())
+            {
+                conn.Open();
+
+                string sql = @"
+                    SELECT COUNT(*)
+                    FROM dbo.DocGia
+                    WHERE LTRIM(RTRIM(SoDienThoai))
+                        = @SoDienThoai
+                      AND MaDocGia <> @MaDocGia";
+
+                using (SqlCommand cmd =
+                    new SqlCommand(sql, conn))
+                {
+                    cmd.Parameters.Add(
+                        "@SoDienThoai",
+                        SqlDbType.NVarChar,
+                        30).Value = docGia.SoDienThoai;
+
+                    cmd.Parameters.Add(
+                        "@MaDocGia",
+                        SqlDbType.Int).Value =
+                        Convert.ToInt32(docGia.MaDocGia);
+
+                    return Convert.ToInt32(
+                        cmd.ExecuteScalar()) > 0;
+                }
+            }
+        }
+
+        private bool CoSachChuaTra(string maDocGia)
+        {
+            using (SqlConnection conn =
+                Database.GetConnection())
+            {
+                conn.Open();
+
+                string sql = @"
+                    SELECT CASE
+                        WHEN EXISTS
+                        (
+                            SELECT 1
+                            FROM dbo.PhieuMuon pm
+                            INNER JOIN dbo.ChiTietMuon ct
+                                ON ct.MaPhieuMuon = pm.MaPhieuMuon
+                            WHERE pm.MaDocGia = @MaDocGia
+                              AND ct.NgayTra IS NULL
+                        )
+                        THEN 1
+                        ELSE 0
+                    END";
+
+                using (SqlCommand cmd =
+                    new SqlCommand(sql, conn))
+                {
+                    cmd.Parameters.Add(
+                        "@MaDocGia",
+                        SqlDbType.Int).Value =
+                        Convert.ToInt32(maDocGia);
+
+                    return Convert.ToInt32(
+                        cmd.ExecuteScalar()) == 1;
+                }
+            }
+        }
+
+        private DataGridViewRow LayDongDangChon()
+        {
+            if (dgvDocGia.SelectedRows.Count == 0)
+                return null;
+
+            DataGridViewRow row =
+                dgvDocGia.SelectedRows[0];
+
+            if (row.IsNewRow)
+                return null;
+
+            return row;
+        }
+
+        private string LayMaDocGia(DataGridViewRow row)
+        {
+            return Convert.ToString(
+                row.Cells["Column1"].Value) ?? "";
+        }
+
+        private void ChonLaiDocGia(string maDocGia)
+        {
+            if (string.IsNullOrWhiteSpace(maDocGia))
+                return;
+
+            dgvDocGia.ClearSelection();
+
+            foreach (DataGridViewRow row in dgvDocGia.Rows)
+            {
+                string ma = LayMaDocGia(row);
+
+                if (ma == maDocGia)
+                {
+                    row.Selected = true;
+
+                    if (row.Index >= 0)
+                    {
+                        dgvDocGia.FirstDisplayedScrollingRowIndex =
+                            row.Index;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        private void LamMoiDanhSach(string maDocGia = "")
+        {
+            if (string.IsNullOrWhiteSpace(
+                toolStripTextBox1.Text))
+            {
+                HienThiDanhSach();
+            }
+            else
+            {
+                TimKiemDocGia();
+            }
+
+            ChonLaiDocGia(maDocGia);
+        }
+
+        private void btnThemDocGia_Click(
+            object sender, EventArgs e)
         {
             using (frmThemDocGia frm = new frmThemDocGia
             {
@@ -98,13 +309,37 @@ namespace Library
                 try
                 {
                     DocGia docGia = LayThongTinTuForm(frm);
+
+                    if (!KiemTraDuLieu(docGia))
+                        return;
+
+                    if (KiemTraTrungSoDienThoai(docGia))
+                    {
+                        ThongBao.CanhBao(
+                            "Số điện thoại này đã được sử dụng bởi độc giả khác.");
+                        return;
+                    }
+
                     docGiaBLL.ThemDocGia(docGia);
 
-                    HienThiDanhSach();
+                    LamMoiDanhSach(docGia.MaDocGia);
 
                     ThongBao.ThanhCong(
                         "Thêm độc giả thành công!\n" +
                         "Thẻ có thời hạn 3 tháng kể từ ngày đăng ký.");
+                }
+                catch (SqlException ex)
+                {
+                    if (ex.Number == 2601 || ex.Number == 2627)
+                    {
+                        ThongBao.CanhBao(
+                            "Mã độc giả hoặc thông tin đã tồn tại.");
+                    }
+                    else
+                    {
+                        ThongBao.Loi(
+                            "Lỗi thêm độc giả:\n" + ex.Message);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -114,31 +349,42 @@ namespace Library
             }
         }
 
-        private void btnSuaDocGia_Click(object sender, EventArgs e)
+        private void btnSuaDocGia_Click(
+            object sender, EventArgs e)
         {
-            if (dgvDocGia.SelectedRows.Count == 0)
+            DataGridViewRow row = LayDongDangChon();
+
+            if (row == null)
             {
                 ThongBao.CanhBao(
                     "Vui lòng chọn độc giả cần sửa.");
                 return;
             }
 
-            DataGridViewRow row = dgvDocGia.SelectedRows[0];
+            DateTime ngaySinh;
+
+            if (!DateTime.TryParse(
+                Convert.ToString(
+                    row.Cells["Column3"].Value),
+                out ngaySinh))
+            {
+                ThongBao.CanhBao(
+                    "Ngày sinh của độc giả không hợp lệ.");
+                return;
+            }
 
             using (frmThemDocGia frm = new frmThemDocGia
             {
                 Text = "Sửa độc giả",
 
-                MaDocGia = Convert.ToString(
-                    row.Cells["Column1"].Value) ?? "",
+                MaDocGia = LayMaDocGia(row),
 
                 MaDocGiaEditable = false,
 
                 HoTen = Convert.ToString(
                     row.Cells["Column2"].Value) ?? "",
 
-                NgaySinh = Convert.ToDateTime(
-                    row.Cells["Column3"].Value),
+                NgaySinh = ngaySinh,
 
                 SoDienThoai = Convert.ToString(
                     row.Cells["Column4"].Value) ?? "",
@@ -160,12 +406,35 @@ namespace Library
                 {
                     DocGia docGia = LayThongTinTuForm(frm);
 
+                    if (!KiemTraDuLieu(docGia))
+                        return;
+
+                    if (KiemTraTrungSoDienThoai(docGia))
+                    {
+                        ThongBao.CanhBao(
+                            "Số điện thoại này đã được sử dụng bởi độc giả khác.");
+                        return;
+                    }
+
                     docGiaBLL.SuaDocGia(docGia);
 
-                    HienThiDanhSach();
+                    LamMoiDanhSach(docGia.MaDocGia);
 
                     ThongBao.ThanhCong(
                         "Sửa độc giả thành công!");
+                }
+                catch (SqlException ex)
+                {
+                    if (ex.Number == 2601 || ex.Number == 2627)
+                    {
+                        ThongBao.CanhBao(
+                            "Thông tin độc giả bị trùng.");
+                    }
+                    else
+                    {
+                        ThongBao.Loi(
+                            "Lỗi sửa độc giả:\n" + ex.Message);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -175,40 +444,67 @@ namespace Library
             }
         }
 
-        private void btnXoaDocGia_Click(object sender, EventArgs e)
+        private void btnXoaDocGia_Click(
+            object sender, EventArgs e)
         {
-            if (dgvDocGia.SelectedRows.Count == 0)
+            DataGridViewRow row = LayDongDangChon();
+
+            if (row == null)
             {
                 ThongBao.CanhBao(
                     "Vui lòng chọn độc giả cần xóa.");
                 return;
             }
 
-            DataGridViewRow row = dgvDocGia.SelectedRows[0];
+            string maDocGia = LayMaDocGia(row);
 
-            string maDocGia =
-                Convert.ToString(
-                    row.Cells["Column1"].Value) ?? "";
-
-            string hoTen =
-                Convert.ToString(
-                    row.Cells["Column2"].Value) ?? "";
-
-            bool xacNhan = ThongBao.XacNhan(
-                "Bạn có chắc muốn xóa độc giả \"" +
-                hoTen + "\" không?");
-
-            if (!xacNhan)
-                return;
+            string hoTen = Convert.ToString(
+                row.Cells["Column2"].Value) ?? "";
 
             try
             {
+                if (CoSachChuaTra(maDocGia))
+                {
+                    ThongBao.CanhBao(
+                        "Không thể xóa độc giả này vì vẫn còn sách chưa trả.\n" +
+                        "Vui lòng hoàn tất trả sách trước khi xóa.");
+                    return;
+                }
+
+                bool xacNhan = ThongBao.XacNhan(
+                    "Bạn có chắc muốn xóa độc giả \"" +
+                    hoTen + "\" không?");
+
+                if (!xacNhan)
+                    return;
+
+                if (CoSachChuaTra(maDocGia))
+                {
+                    ThongBao.CanhBao(
+                        "Độc giả hiện có sách chưa trả. Không thể xóa.");
+                    return;
+                }
+
                 docGiaBLL.XoaDocGia(maDocGia);
 
-                HienThiDanhSach();
+                LamMoiDanhSach();
 
                 ThongBao.ThanhCong(
                     "Xóa độc giả thành công!");
+            }
+            catch (SqlException ex)
+            {
+                if (ex.Number == 547)
+                {
+                    ThongBao.CanhBao(
+                        "Không thể xóa độc giả vì còn dữ liệu mượn sách hoặc dữ liệu liên quan.\n" +
+                        "Cần giữ lại lịch sử giao dịch của độc giả.");
+                }
+                else
+                {
+                    ThongBao.Loi(
+                        "Lỗi xóa độc giả:\n" + ex.Message);
+                }
             }
             catch (Exception ex)
             {
@@ -217,31 +513,36 @@ namespace Library
             }
         }
 
-        private void btnGiaHan_Click(object sender, EventArgs e)
+        private void btnGiaHan_Click(
+            object sender, EventArgs e)
         {
-            if (dgvDocGia.SelectedRows.Count == 0)
+            DataGridViewRow row = LayDongDangChon();
+
+            if (row == null)
             {
                 ThongBao.CanhBao(
                     "Vui lòng chọn độc giả cần gia hạn.");
                 return;
             }
 
-            DataGridViewRow row = dgvDocGia.SelectedRows[0];
+            string maDocGia = LayMaDocGia(row);
 
-            string maDocGia =
-                Convert.ToString(
-                    row.Cells["Column1"].Value) ?? "";
-
-            string hoTen =
-                Convert.ToString(
-                    row.Cells["Column2"].Value) ?? "";
+            string hoTen = Convert.ToString(
+                row.Cells["Column2"].Value) ?? "";
 
             string ngayHetHanCu = "Chưa xác định";
 
-            if (row.Cells["colNgayHetHan"].Value
-                is DateTime ngay)
+            object giaTriNgay =
+                row.Cells["colNgayHetHan"].Value;
+
+            if (giaTriNgay != null &&
+                giaTriNgay != DBNull.Value &&
+                DateTime.TryParse(
+                    Convert.ToString(giaTriNgay),
+                    out DateTime ngayHetHan))
             {
-                ngayHetHanCu = ngay.ToString("dd/MM/yyyy");
+                ngayHetHanCu =
+                    ngayHetHan.ToString("dd/MM/yyyy");
             }
 
             bool xacNhan = ThongBao.XacNhan(
@@ -258,7 +559,7 @@ namespace Library
                 DateTime ngayHetHanMoi =
                     docGiaBLL.GiaHanThe(maDocGia);
 
-                HienThiDanhSach();
+                LamMoiDanhSach(maDocGia);
 
                 ThongBao.ThanhCong(
                     "Gia hạn thẻ thành công!\n" +
@@ -301,7 +602,8 @@ namespace Library
 
         private void TimKiemDocGia()
         {
-            string tuKhoa = toolStripTextBox1.Text.Trim();
+            string tuKhoa =
+                toolStripTextBox1.Text.Trim();
 
             try
             {
@@ -313,18 +615,21 @@ namespace Library
 
                 List<DocGia> danhSach =
                     docGiaBLL.TimKiem(
-                        LayCotTimKiem(), tuKhoa);
+                        LayCotTimKiem(),
+                        tuKhoa);
 
                 DoDuLieuLenBang(danhSach);
             }
             catch (Exception ex)
             {
                 ThongBao.Loi(
-                    "Lỗi tìm kiếm độc giả:\n" + ex.Message);
+                    "Lỗi tìm kiếm độc giả:\n" +
+                    ex.Message);
             }
         }
 
-        private void btnTimKiem_Click(object sender, EventArgs e)
+        private void btnTimKiem_Click(
+            object sender, EventArgs e)
         {
             TimKiemDocGia();
         }
@@ -363,11 +668,13 @@ namespace Library
             catch (Exception ex)
             {
                 ThongBao.Loi(
-                    "Lỗi tải danh sách độc giả:\n" + ex.Message);
+                    "Lỗi tải danh sách độc giả:\n" +
+                    ex.Message);
             }
         }
 
-        private void DoDuLieuLenBang(List<DocGia> danhSach)
+        private void DoDuLieuLenBang(
+            List<DocGia> danhSach)
         {
             dgvDocGia.Rows.Clear();
 
@@ -401,12 +708,12 @@ namespace Library
 
                 row.Cells["colNgayDangKy"].Value =
                     docGia.NgayDangKy.HasValue
-                        ? docGia.NgayDangKy.Value
+                        ? (object)docGia.NgayDangKy.Value
                         : DBNull.Value;
 
                 row.Cells["colNgayHetHan"].Value =
                     docGia.NgayHetHan.HasValue
-                        ? docGia.NgayHetHan.Value
+                        ? (object)docGia.NgayHetHan.Value
                         : DBNull.Value;
 
                 DataGridViewCell cell =

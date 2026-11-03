@@ -449,7 +449,7 @@ namespace Library
 
             ResumeLayout(true);
         }
-
+    
 
         private void TaoNhan(
             Control parent,
